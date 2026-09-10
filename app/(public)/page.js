@@ -1,0 +1,487 @@
+'use client';
+
+import { useEffect, useRef, useState, createContext, useContext, useCallback } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { Loader2 } from 'lucide-react';
+
+// ─── Cart Context ────────────────────────────────────────
+const CartContext = createContext();
+
+export function CartProvider({ children }) {
+  const [cartItems, setCartItems] = useState([]);
+
+  // Load cart from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('cart');
+      if (stored) setCartItems(JSON.parse(stored));
+    } catch (e) {
+      console.error('Failed to load cart', e);
+    }
+  }, []);
+
+  // Persist cart to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('cart', JSON.stringify(cartItems));
+  }, [cartItems]);
+
+  const addToCart = useCallback((product, quantity = 1) => {
+    setCartItems(prev => {
+      const existing = prev.find(item => item._id === product._id);
+      if (existing) {
+        return prev.map(item =>
+          item._id === product._id
+            ? { ...item, quantity: item.quantity + quantity }
+            : item
+        );
+      }
+      return [...prev, { ...product, quantity }];
+    });
+  }, []);
+
+  const removeFromCart = useCallback((productId) => {
+    setCartItems(prev => prev.filter(item => item._id !== productId));
+  }, []);
+
+  const updateQuantity = useCallback((productId, quantity) => {
+    if (quantity <= 0) {
+      removeFromCart(productId);
+      return;
+    }
+    setCartItems(prev =>
+      prev.map(item => (item._id === productId ? { ...item, quantity } : item))
+    );
+  }, [removeFromCart]);
+
+  const clearCart = useCallback(() => setCartItems([]), []);
+
+  const cartTotal = cartItems.reduce(
+    (sum, item) => sum + (item.discountPrice || item.price) * item.quantity,
+    0
+  );
+  const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
+  return (
+    <CartContext.Provider
+      value={{
+        cartItems,
+        addToCart,
+        removeFromCart,
+        updateQuantity,
+        clearCart,
+        cartTotal,
+        cartCount,
+      }}
+    >
+      {children}
+    </CartContext.Provider>
+  );
+}
+
+export function useCart() {
+  const context = useContext(CartContext);
+  if (!context) {
+    throw new Error('useCart must be used within a CartProvider');
+  }
+  return context;
+}
+
+// ─── Toast Component ─────────────────────────────────────
+function Toast({ message, onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl animate-slide-up">
+      {message}
+    </div>
+  );
+}
+
+// ─── Home Page Content (uses useCart) ────────────────────
+function HomePageContent() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [toast, setToast] = useState(null);
+  const sectionsRef = useRef([]);
+
+  // Access cart context inside the provider
+  const { addToCart } = useCart();
+
+  // ─── Fetch products ──────────────────────────────────────
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+        const res = await fetch(`${API_BASE}/products`);
+        if (!res.ok) throw new Error('Failed to fetch products');
+        const data = await res.json();
+        const featured = data.products?.filter((p) => p.isFeatured) || [];
+        const fallback = data.products?.slice(0, 4) || [];
+        setProducts(featured.length > 0 ? featured : fallback);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  // ─── Intersection Observer for scroll animations ──────
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('animate-visible');
+          }
+        });
+      },
+      { threshold: 0.2 }
+    );
+
+    sectionsRef.current.forEach((section) => {
+      if (section) observer.observe(section);
+    });
+
+    return () => observer.disconnect();
+  }, [products]);
+
+  const addToRefs = (el) => {
+    if (el && !sectionsRef.current.includes(el)) {
+      sectionsRef.current.push(el);
+    }
+  };
+
+  // ─── Slideshow state & images ─────────────────────────
+  const slides = [
+    '/facepro1.avif',
+    '/facepro2.avif',
+    '/facepro3.avif',
+    '/facepro4.avif',
+    '/facepro5.avif'
+  ];
+
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % slides.length);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [slides.length]);
+
+  // ─── Add to cart handler with toast ──────────────────
+  const handleAddToCart = (product) => {
+    addToCart(product);
+    setToast(`${product.name} added to cart!`);
+  };
+
+  // ─── Loading state ────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="animate-spin text-[#1a237e]" size={40} />
+      </div>
+    );
+  }
+
+  // ─── Error state ──────────────────────────────────────
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <p className="text-red-500">Error: {error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-[#1a237e] text-white rounded-lg"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // ─── Main content ─────────────────────────────────────
+  return (
+    <>
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      <div className="bg-white min-h-screen overflow-x-hidden">
+        {/* ─── HERO ────────────────────────────────────────── */}
+        <section className="relative bg-gradient-to-br from-gray-900 to-gray-800 text-white py-20 md:py-28 overflow-hidden">
+          <div className="absolute inset-0 opacity-20">
+            <div className="absolute top-20 left-10 w-64 h-64 bg-white rounded-full blur-3xl animate-pulse"></div>
+            <div className="absolute bottom-20 right-10 w-80 h-80 bg-gray-500 rounded-full blur-3xl animate-pulse delay-1000"></div>
+          </div>
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid md:grid-cols-2 gap-10 items-center">
+              <div className="text-center md:text-left">
+                <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
+                  Glow Naturally
+                  <span className="block text-gray-300 text-2xl md:text-3xl mt-2">
+                    with Clean Beauty
+                  </span>
+                </h1>
+                <p className="text-base md:text-lg text-gray-200 mt-4 mb-6 max-w-lg mx-auto md:mx-0">
+                  Dermatologist‑tested, cruelty‑free skincare that transforms your
+                  skin. Join 10,000+ happy customers.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
+                  <Link
+                    href="/products"
+                    className="group relative inline-flex items-center justify-center px-6 py-2.5 text-base font-bold text-gray-900 bg-white rounded-full overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-xl"
+                  >
+                    <span className="relative z-10">Shop Now</span>
+                    <span className="absolute inset-0 bg-gray-100 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></span>
+                  </Link>
+                  <Link
+                    href="/services"
+                    className="inline-flex items-center justify-center px-6 py-2.5 text-base font-semibold text-white border-2 border-white rounded-full hover:bg-white hover:text-gray-900 transition-all duration-300 hover:scale-105"
+                  >
+                    Explore Services
+                  </Link>
+                </div>
+              </div>
+
+              {/* SLIDESHOW */}
+              <div className="relative h-72 md:h-96 rounded-2xl overflow-hidden shadow-2xl">
+                <div className="absolute inset-0 z-10 bg-gradient-to-r from-gray-900/10 to-gray-900/10 rounded-2xl pointer-events-none" />
+                {slides.map((src, index) => (
+                  <div
+                    key={index}
+                    className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                      index === currentSlide ? 'opacity-100' : 'opacity-0'
+                    }`}
+                  >
+                    <img
+                      src={src}
+                      alt={`Slide ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── FEATURES ────────────────────────────────────── */}
+        <section ref={addToRefs} className="py-16 md:py-20 bg-white animate-on-scroll">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12 md:mb-16">
+              <h2 className="text-2xl md:text-4xl font-bold text-gray-900">
+                Why You'll Love Us
+              </h2>
+              <p className="text-gray-600 mt-2 max-w-2xl mx-auto text-sm md:text-base">
+                Clean ingredients, sustainable packaging, and real results.
+              </p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-6 md:gap-8">
+              {[
+                {
+                  title: 'Cruelty‑Free',
+                  desc: 'Never tested on animals. Leaping Bunny certified.',
+                  icon: '🐰',
+                  bg: 'bg-pink-50',
+                },
+                {
+                  title: 'Dermatologist Tested',
+                  desc: 'Approved by skin experts for safety & efficacy.',
+                  icon: '👩‍⚕️',
+                  bg: 'bg-blue-50',
+                },
+                {
+                  title: 'Eco‑Friendly',
+                  desc: 'Recyclable packaging & carbon‑neutral shipping.',
+                  icon: '🌱',
+                  bg: 'bg-green-50',
+                },
+              ].map((feat, idx) => (
+                <div
+                  key={idx}
+                  className={`group p-6 md:p-8 rounded-2xl text-center transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 ${feat.bg}`}
+                >
+                  <div className="text-5xl md:text-6xl mb-3 md:mb-4 group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">
+                    {feat.icon}
+                  </div>
+                  <h3 className="text-xl md:text-2xl font-bold text-gray-900">
+                    {feat.title}
+                  </h3>
+                  <p className="text-gray-600 mt-2 text-sm md:text-base">
+                    {feat.desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ─── FEATURED PRODUCTS ───────────────────────────── */}
+        <section ref={addToRefs} className="py-12 md:py-20 bg-gray-50 animate-on-scroll">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-8 md:mb-16">
+              <h2 className="text-2xl md:text-4xl font-bold text-gray-900">
+                Bestsellers
+              </h2>
+              <p className="text-gray-600 mt-2 text-sm md:text-base">
+                Loved by thousands – shop our most popular picks
+              </p>
+            </div>
+
+            {products.length === 0 ? (
+              <p className="text-center text-gray-500">No products available yet.</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 md:gap-8">
+                {products.map((product, idx) => {
+                  const rawUrl = product.images?.[0] || '';
+                  const imageUrl = rawUrl.trim() !== '' ? rawUrl : '/placeholder.png';
+                  const hasDiscount =
+                    product.discountPrice && product.discountPrice < product.price;
+                  const finalPrice = hasDiscount ? product.discountPrice : product.price;
+
+                  return (
+                    <div
+                      key={product._id}
+                      className="group bg-white rounded-xl sm:rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 flex flex-col"
+                      style={{ transitionDelay: `${idx * 100}ms` }}
+                    >
+                      <Link href={`/product/${product.slug}`} className="block">
+                        <div className="relative h-40 sm:h-56 md:h-64 overflow-hidden">
+                          {imageUrl && imageUrl !== '' ? (
+                            <Image
+                              src={imageUrl}
+                              alt={product.name}
+                              fill
+                              className="object-cover transition-transform duration-700 group-hover:scale-110"
+                              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                              unoptimized
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-500">
+                              No Image
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300"></div>
+                        </div>
+                      </Link>
+
+                      {/* ── Product Details ── */}
+                      <div className="p-3 sm:p-4 flex flex-col flex-grow">
+                        <Link href={`/product/${product.slug}`} className="block">
+                          <h3 className="text-sm sm:text-base font-semibold text-gray-900 line-clamp-2 hover:text-[#1a237e] transition-colors">
+                            {product.name}
+                          </h3>
+                        </Link>
+                        <div className="mt-2 flex items-baseline gap-2">
+                          <span className="text-lg sm:text-xl font-bold text-gray-900">
+                            ₹{finalPrice}
+                          </span>
+                          {hasDiscount && (
+                            <span className="text-xs sm:text-sm text-gray-500 line-through">
+                              ₹{product.price}
+                            </span>
+                          )}
+                        </div>
+                        {/* Add to Cart Button */}
+                        <button
+                          onClick={() => handleAddToCart(product)}
+                          className="mt-3 w-full py-2 px-4 bg-[#1a237e] text-white text-sm sm:text-base font-medium rounded-lg hover:bg-[#283593] active:scale-95 transition-all duration-200 flex items-center justify-center gap-2"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"
+                            />
+                          </svg>
+                          Add to Cart
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="text-center mt-8 md:mt-12">
+              <Link
+                href="/products"
+                className="inline-block border-2 border-gray-900 text-gray-900 px-6 md:px-8 py-2 md:py-3 rounded-full font-semibold text-sm md:text-base transition-all duration-300 hover:bg-gray-900 hover:text-white hover:scale-105 hover:shadow-lg"
+              >
+                View All Products →
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── TESTIMONIAL ──────────────────────────────────── */}
+        <section ref={addToRefs} className="py-16 md:py-20 bg-white relative overflow-hidden animate-on-scroll">
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900 via-transparent to-transparent"></div>
+          </div>
+          <div className="max-w-4xl mx-auto px-4 text-center relative">
+            <div className="text-7xl md:text-8xl text-gray-200 mb-3 md:mb-4">“</div>
+            <p className="text-xl md:text-2xl text-gray-800 italic font-light leading-relaxed">
+              “My skin has never looked better. The Vitamin C serum is a game‑changer –
+              bright, even tone and zero irritation. I’m a customer for life.”
+            </p>
+            <div className="mt-6 md:mt-8">
+              <div className="flex justify-center gap-1 text-yellow-400 text-xl md:text-2xl">★★★★★</div>
+              <p className="font-bold text-gray-900 mt-3 text-base md:text-lg">— Jessica T.</p>
+              <p className="text-gray-500 text-sm">Verified Buyer · 2 weeks ago</p>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── NEWSLETTER ───────────────────────────────────── */}
+        <section ref={addToRefs} className="py-16 md:py-20 bg-gray-900 text-white animate-on-scroll">
+          <div className="max-w-4xl mx-auto px-4 text-center">
+            <h2 className="text-2xl md:text-4xl font-bold">Ready to glow?</h2>
+            <p className="text-gray-300 mt-2 md:mt-3 mb-6 md:mb-8 text-sm md:text-base">
+              Sign up for 15% off your first order + skincare tips.
+            </p>
+            <form
+              className="flex flex-col sm:flex-row gap-3 md:gap-4 max-w-md mx-auto"
+              onSubmit={(e) => e.preventDefault()}
+            >
+              <input
+                type="email"
+                placeholder="Your email address"
+                className="flex-1 px-4 md:px-5 py-2.5 md:py-3 rounded-full text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm md:text-base"
+                required
+              />
+              <button
+                type="submit"
+                className="px-6 md:px-8 py-2.5 md:py-3 bg-white text-gray-900 rounded-full font-semibold transition-all duration-300 hover:scale-105 hover:shadow-xl hover:bg-gray-100 text-sm md:text-base"
+              >
+                Subscribe
+              </button>
+            </form>
+            <p className="text-xs text-gray-400 mt-4">No spam. Unsubscribe anytime.</p>
+          </div>
+        </section>
+      </div>
+    </>
+  );
+}
+
+// ─── Default Export: wraps content with CartProvider ────
+export default function HomePage() {
+  return (
+    <CartProvider>
+      <HomePageContent />
+    </CartProvider>
+  );
+}
+
