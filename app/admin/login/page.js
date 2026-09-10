@@ -10,21 +10,14 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
 
-  try {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL;
-    const res = await fetch(`${API_URL}/admin/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
+    const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+    const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
 
-    const data = await res.json();
-
-    if (data.success) {
+    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
       localStorage.setItem('adminLoggedIn', 'true');
       window.dispatchEvent(new Event('admin-updated'));
       toast.success('Welcome Admin!');
@@ -32,14 +25,11 @@ export default function AdminLoginPage() {
         window.location.href = '/admin/dashboard';
       }, 150);
     } else {
-      toast.error(data.message || 'Invalid credentials');
+      toast.error('Invalid credentials');
     }
-  } catch (error) {
-    toast.error('Login failed. Please try again.');
-  } finally {
+
     setLoading(false);
-  }
-};
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
@@ -113,4 +103,3 @@ export default function AdminLoginPage() {
     </div>
   );
 }
-
