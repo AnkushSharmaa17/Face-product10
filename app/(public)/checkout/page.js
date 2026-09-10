@@ -11,7 +11,7 @@ const MERCHANT_UPI_ID = "9816722750@axl";
 const MERCHANT_NAME = "Face Product";
 
 // ---------- Backend API base ----------
-const API_BASE = '';   // adjust to your backend port
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 // ---------- Searchable Select (fully implemented) ----------
 const SearchableSelect = ({ options, value, onChange, placeholder, disabled = false, loading = false }) => {
@@ -315,7 +315,7 @@ export default function CheckoutPage() {
     }
     setOtp(prev => ({ ...prev, loading: true, error: '' }));
     try {
-      const res = await fetch(`${API_BASE}/api/otp/send-otp`, {
+      const res = await fetch(`${API_BASE}/otp/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: form.email }),
@@ -356,7 +356,7 @@ export default function CheckoutPage() {
     }
     setOtp(prev => ({ ...prev, loading: true, error: '' }));
     try {
-      const res = await fetch(`${API_BASE}/api/otp/verify-otp`, {
+      const res = await fetch(`${API_BASE}/otp/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: form.email, otp: otp.value }),
@@ -418,7 +418,7 @@ export default function CheckoutPage() {
     const paymentToken = paymentData.paymentMethodData.tokenizationData.token;
     setIsPaymentProcessing(true);
     try {
-      const response = await fetch(`${API_BASE}/api/process-payment`, {
+      const response = await fetch(`${API_BASE}/process-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: paymentToken, total }),

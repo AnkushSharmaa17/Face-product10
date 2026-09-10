@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2, ArrowUpDown, Search } from 'lucide-react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 export default function AdminPaymentsPage() {
   const [payments, setPayments] = useState([]);

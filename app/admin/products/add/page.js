@@ -147,7 +147,7 @@ export default function CreateProductPage() {
         imageFiles.forEach((file) => formData.append("images", file));
 
         const uploadRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "/api"}/upload`,
+          `${process.env.NEXT_PUBLIC_API_URL || ""}/upload`,
           {
             method: "POST",
             body: formData,
@@ -171,7 +171,7 @@ export default function CreateProductPage() {
       if (!payload.sku) delete payload.sku;
       if (!payload.weight) delete payload.weight;
 
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
       const res = await fetch(`${API_BASE}/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

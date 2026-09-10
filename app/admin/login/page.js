@@ -10,38 +10,36 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+  try {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    const res = await fetch(`${API_URL}/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      if (data.success) {
-        // If you returned a token, store it (not the real password)
-        localStorage.setItem('adminLoggedIn', 'true');
-        // Optionally store token: localStorage.setItem('admin_token', data.token);
-        window.dispatchEvent(new Event('admin-updated'));
-        toast.success('Welcome Admin!');
-        setTimeout(() => {
-          window.location.href = '/admin/dashboard';
-        }, 150);
-      } else {
-        toast.error(data.message || 'Invalid credentials');
-      }
-    } catch (error) {
-      toast.error('Login failed. Please try again.');
-    } finally {
-      setLoading(false);
+    if (data.success) {
+      localStorage.setItem('adminLoggedIn', 'true');
+      window.dispatchEvent(new Event('admin-updated'));
+      toast.success('Welcome Admin!');
+      setTimeout(() => {
+        window.location.href = '/admin/dashboard';
+      }, 150);
+    } else {
+      toast.error(data.message || 'Invalid credentials');
     }
-  
-  };
+  } catch (error) {
+    toast.error('Login failed. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
